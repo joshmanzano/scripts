@@ -4,6 +4,41 @@ import sys
 import time
 import subprocess
 
+def normalize_mac(mac_address):
+    """
+    Normalize MAC address to lowercase without separators.
+    Example: 4E-1D-2C-7D-B5-9A -> 4e1d2c7db59a
+    
+    Args:
+        mac_address: MAC address in any format
+    
+    Returns:
+        Normalized MAC address string
+    """
+    return re.sub(r'[:-]', '', mac_address).lower()
+
+def is_mac_authorized(normalized_mac, auth_file='/etc/freeradius/3.0/users'):
+    """
+    Check if a normalized MAC address exists in the authorization file.
+    
+    Args:
+        normalized_mac: MAC address in normalized format (e.g., e8d52b79dcc0)
+        auth_file: Path to the FreeRADIUS users file
+    
+    Returns:
+        True if MAC is found, False otherwise
+    """
+    try:
+        with open(auth_file, 'r') as f:
+            content = f.read()
+            return normalized_mac in content
+    except FileNotFoundError:
+        print(f"Warning: Authorization file '{auth_file}' not found.")
+        return False
+    except PermissionError:
+        print(f"Warning: Permission denied reading '{auth_file}'. May need sudo.")
+        return False
+
 def monitor_log_for_mac(log_file_path):
     """
     Monitor a log file for MAC addresses and execute a command when found.
@@ -34,17 +69,31 @@ def monitor_log_for_mac(log_file_path):
                 
                 if match:
                     mac_address = match.group(0)
+                    normalized_mac = normalize_mac(mac_address)
+                    
                     print(f"MAC Address found: {mac_address}")
+                    print(f"Normalized: {normalized_mac}")
                     
-                    # Execute bash command (placeholder)
-                    # Replace with your actual command
-                    command = f"echo 'Processing MAC: {mac_address}'"
-                    
-                    try:
-                        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-                        print(f"Command output: {result.stdout.strip()}")
-                    except Exception as e:
-                        print(f"Error executing command: {e}")
+                    # Check if MAC is already authorized
+                    if is_mac_authorized(normalized_mac):
+                        print(f"{normalized_mac} is authorized")
+                        # Don't run command, continue monitoring
+                        continue
+                    else:
+                        print(f"{normalized_mac} is NOT authorized - executing command...")
+                        
+                        # Execute bash command (placeholder)
+                        # Replace with your actual command
+                        command = f"echo 'Adding MAC to authorized list: {normalized_mac}'"
+                        
+                        try:
+                            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                            print(f"Command output: {result.stdout.strip()}")
+                            print("Exiting script.")
+                            sys.exit(0)
+                        except Exception as e:
+                            print(f"Error executing command: {e}")
+                            sys.exit(1)
     
     except FileNotFoundError:
         print(f"Error: Log file '{log_file_path}' not found.")
